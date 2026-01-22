@@ -47,10 +47,38 @@ def get_axis_name(axis_list):
         return "Custom"
     except: return "Custom"
 
-def load_urdf_to_iframe(file_obj):
-    if file_obj is None: return None, []
-    with open(file_obj.name, "r", encoding="utf-8") as f: content = f.read()
-    if not renderer.load_urdf(content): return "<h3>Error</h3>", []
+def load_urdf_to_iframe(file_objs):
+    if not file_objs: return None, []
+    
+    # [수정] 업로드된 파일들 중에서 .urdf 파일 찾기
+    urdf_content = None
+    mesh_files = [] # STL 등 나머지 파일들의 경로 리스트
+    
+    # Gradio는 file_objs로 파일 경로 리스트(또는 객체 리스트)를 줍니다.
+    # file_objs는 리스트 형태입니다.
+    
+    for f in file_objs:
+        # f는 보통 temp 경로 문자열이거나 파일 객체입니다. Gradio 버전에 따라 다를 수 있으나
+        # 보통 f.name 으로 접근하거나 f 자체가 경로입니다.
+        try:
+            filename = f.name # Gradio 파일 객체일 경우
+        except:
+            filename = f # 문자열 경로일 경우
+
+        if filename.endswith(".urdf") or filename.endswith(".URDF"):
+            with open(filename, "r", encoding="utf-8") as urdf_file:
+                urdf_content = urdf_file.read()
+        else:
+            # URDF가 아닌 파일들은 전부 메쉬 파일 후보로 저장
+            mesh_files.append(filename)
+
+    if urdf_content is None:
+        return "<h3>Error: URDF file not found in upload.</h3>", []
+
+    # [수정] URDF 내용과 함께 메쉬 파일 리스트도 렌더러에 전달
+    if not renderer.load_urdf(urdf_content, mesh_files=mesh_files): 
+        return "<h3>Error parsing URDF</h3>", []
+
     html = renderer.get_viewer_html()
     iframe = f'<iframe id="vis_iframe" srcdoc="{html}" width="100%" height="600px" style="border:1px solid #ddd;" allowfullscreen></iframe>'
     return iframe, renderer.get_joint_list()
@@ -150,7 +178,7 @@ with gr.Blocks(title="URDF Builder") as demo:
             
             with gr.Row():
                 with gr.Column(scale=3):
-                    vis_file = gr.File(label="Upload URDF", file_types=[".urdf"])
+                    vis_file = gr.File(label="Upload URDF & STL Files", file_count="multiple")
                     @gr.render(inputs=vis_state)
                     def render_vis(data):
                         html, _ = data
