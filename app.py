@@ -298,5 +298,5 @@ with gr.Blocks(title="URDF Builder") as demo:
             vis_file.change(on_upload, vis_file, vis_state)
 
 if __name__ == "__main__":
-    # demo.launch()
-    demo.launch(server_name="0.0.0.0", server_port=50001)
+    demo.launch()
+    # demo.launch(server_name="0.0.0.0", server_port=50001)
