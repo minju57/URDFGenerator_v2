@@ -81,18 +81,11 @@ class URDFManager:
             writer.end(L1, "link")
 
             # 2. 'floating_base' joint 생성 (base -> base_link)
-            writer.start(L1, "joint", 'name="floating_base" type="fixed"')
+            writer.start(L1, "joint", 'name="floating_base" type="floating')
             writer.tag(L2, "origin", 'rpy="0 0 0" xyz="0 0 0"')
             writer.tag(L2, "parent", 'link="base"')
             writer.tag(L2, "child", f'link="{base_link_name}"')
             writer.end(L1, "joint")
-        
-        writer.tag(L1, "link", 'name="world"')
-        writer.start(L1, "joint", 'name="world_to_base" type="fixed"')
-        writer.tag(L2, "parent", 'link="world"')
-        writer.tag(L2, "child", f'link="{base_link_name}"')
-        writer.tag(L2, "origin", 'xyz="0 0 1.0" rpy="0 0 0"') 
-        writer.end(L1, "joint")
 
         # --- Base Link ---
         writer.start(L1, "link", f'name="{base_link_name}"')
