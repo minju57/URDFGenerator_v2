@@ -13,21 +13,25 @@ class URDFManager:
         return {"Roll": "1 0 0", "Pitch": "0 1 0", "Yaw": "0 0 1"}.get(axis_name, "1 0 0")
 
     def _calc_cylinder_geometry(self, dx, dy, dz):
+        # 시작점(0,0,0)에서 목표점(dx,dy,dz)까지 이어지는 실린더의 중심과 회전, 길이 계산
         cx, cy, cz = dx * 0.5, dy * 0.5, dz * 0.5
         ax, ay, az = abs(dx), abs(dy), abs(dz)
         roll, pitch, yaw = 0.0, 0.0, 0.0
         length, radius = 0.0, 0.0
+        
+        # 가장 긴 축을 기준으로 회전 및 길이 설정
         if ax >= ay and ax >= az:     
-            pitch, length = 1.5708, ax
+            pitch, length = 1.5708, ax # Y축 회전 -> X축 정렬
             radius = 0.5 * np.sqrt(dy**2 + dz**2)
         elif ay >= ax and ay >= az:   
-            roll, length = 1.5708, ay
+            roll, length = 1.5708, ay # X축 회전 -> Y축 정렬
             radius = 0.5 * np.sqrt(dx**2 + dz**2)
         else:                         
-            length = az
+            length = az # 기본 Z축 정렬
             radius = 0.5 * np.sqrt(dx**2 + dy**2)
+            
         if length < 1e-6: length = 0.05
-        if radius < 0.03: radius = 0.03 
+        if radius < 0.02: radius = 0.03 # 최소 두께 보장
         return (cx, cy, cz), (roll, pitch, yaw), (length, radius)
 
     def _calc_box_geometry(self, dx, dy, dz):
@@ -37,55 +41,108 @@ class URDFManager:
         lz = abs(dz) if abs(dz) > 1e-3 else 0.05
         return (cx, cy, cz), (lx, ly, lz)
 
-    def generate(self, joints, filename="robot.urdf", include_base=True, base_mesh_path=None, inertia_data=None):
+    def generate(self, joints, filename="robot.urdf", base_data=None, inertia_data=None, robot_name="generated_robot", base_mode="Fixed Base"):
         writer = URDFWriter()
         L0, L1, L2, L3, L4 = "", "  ", "    ", "      ", "        "
 
-        writer.xml_header()
-        writer.start(L0, "robot", f'name="{self.robot_name}"')
-        writer.mujoco_setting(L1)
+        # [1] 트리 구조 분석: 각 링크가 어떤 자식 조인트들을 가지고 있는지 매핑
+        child_map = {}
+        for j in joints:
+            p = j['parent']
+            if p not in child_map: child_map[p] = []
+            child_map[p].append(j)
 
+        writer.xml_header()
+        writer.start(L0, "robot", f'name="{robot_name}"')
+        writer.mujoco_setting(L1)
+        base_link_name = "base_link"
+
+        # --- World Fixed Joint ---
+        if base_mode == "Fixed Base":
+            # --- Option A: Fixed Base (기존 방식) ---
+            writer.tag(L1, "link", 'name="world"')
+            
+            writer.start(L1, "joint", 'name="world_to_base" type="fixed"')
+            writer.tag(L2, "parent", 'link="world"')
+            writer.tag(L2, "child", f'link="{base_link_name}"')
+            writer.tag(L2, "origin", 'xyz="0 0 1.0" rpy="0 0 0"') 
+            writer.end(L1, "joint")
+            
+        else:
+            # --- Option B: Floating Base (요청하신 방식) ---
+            # 1. dummy 'base' link 생성
+            writer.start(L1, "link", 'name="base"')
+            writer.start(L2, "visual")
+            writer.tag(L3, "origin", 'rpy="0 0 0" xyz="0 0 0"')
+            writer.start(L3, "geometry")
+            writer.tag(L4, "box", 'size="0.001 0.001 0.001"')
+            writer.end(L3, "geometry")
+            writer.end(L2, "visual")
+            writer.end(L1, "link")
+
+            # 2. 'floating_base' joint 생성 (base -> base_link)
+            writer.start(L1, "joint", 'name="floating_base" type="fixed"')
+            writer.tag(L2, "origin", 'rpy="0 0 0" xyz="0 0 0"')
+            writer.tag(L2, "parent", 'link="base"')
+            writer.tag(L2, "child", f'link="{base_link_name}"')
+            writer.end(L1, "joint")
+        
         writer.tag(L1, "link", 'name="world"')
-        writer.start(L1, "joint", 'name="world_to_body" type="fixed"')
+        writer.start(L1, "joint", 'name="world_to_base" type="fixed"')
         writer.tag(L2, "parent", 'link="world"')
-        writer.tag(L2, "child", 'link="body"')
+        writer.tag(L2, "child", f'link="{base_link_name}"')
         writer.tag(L2, "origin", 'xyz="0 0 1.0" rpy="0 0 0"') 
         writer.end(L1, "joint")
 
-        # --- Base Link ("body") ---
-        writer.start(L1, "link", 'name="body"')
+        # --- Base Link ---
+        writer.start(L1, "link", f'name="{base_link_name}"')
         
-        # [우선순위 1] 자동 원통형 Stand
-        if include_base:
-            body_radius = 0.08
-            if len(joints) > 0:
-                first_x = float(joints[0]['x'])
-                first_y = float(joints[0]['y'])
-                body_radius = np.sqrt(first_x**2 + first_y**2)
-                if body_radius < 0.05: body_radius = 0.08
-                else: body_radius *= 1.1
+        base_type = base_data.get('type', 'Auto (Cylinder)')
+        
+        if base_type != "None":
+            writer.start(L2, "visual")
             
-            writer.start(L2, "visual")
-            writer.tag(L3, "origin", 'xyz="0 0 -0.5" rpy="0 0 0"') 
-            writer.start(L3, "geometry")
-            writer.tag(L4, "cylinder", f'radius="{body_radius:.4f}" length="1.0"')
-            writer.end(L3, "geometry")
-            # Base는 구분을 위해 아주 짙은 회색 사용
-            writer.material(L3, "base_grey", 0.2, 0.2, 0.2) 
-            writer.end(L2, "visual")
-        
-        # [우선순위 2] 커스텀 Mesh (Cylinder가 꺼져있고 경로가 있을 때)
-        elif base_mesh_path and base_mesh_path.strip():
-            writer.start(L2, "visual")
-            writer.tag(L3, "origin", 'xyz="0 0 0" rpy="0 0 0"')
-            writer.start(L3, "geometry")
-            writer.tag(L4, "mesh", f'filename="{base_mesh_path}" scale="0.001 0.001 0.001"')
-            writer.end(L3, "geometry")
+            # 1. Auto (Cylinder) for Base
+            if base_type == 'Auto (Cylinder)':
+                body_radius = 0.08
+                connected_joints = child_map.get(base_link_name, [])
+                if connected_joints:
+                    j0 = connected_joints[0]
+                    dist = np.sqrt(j0['x']**2 + j0['y']**2)
+                    if dist > 0.05: body_radius = dist * 1.1
+                
+                writer.tag(L3, "origin", 'xyz="0 0 -0.5" rpy="0 0 0"')
+                writer.start(L3, "geometry")
+                writer.tag(L4, "cylinder", f'radius="{body_radius:.4f}" length="1.0"')
+                writer.end(L3, "geometry")
+
+            # 2. Mesh
+            elif base_type == 'Mesh':
+                writer.tag(L3, "origin", 'xyz="0 0 0" rpy="0 0 0"')
+                writer.start(L3, "geometry")
+                path = base_data.get('mesh', "")
+                writer.tag(L4, "mesh", f'filename="{path}" scale="0.001 0.001 0.001"')
+                writer.end(L3, "geometry")
+                
+            # 3. Manual
+            elif base_type.startswith("Manual"):
+                shape = base_type.split('(')[1][:-1]
+                dims = base_data.get('dim', [0.05, 0.05, 0.05])
+                xyz = base_data.get('xyz', [0,0,0])
+                rpy_deg = base_data.get('rpy', [0,0,0])
+                rpy_rad = [self._deg_to_rad(v) for v in rpy_deg]
+                
+                writer.tag(L3, "origin", f'xyz="{xyz[0]} {xyz[1]} {xyz[2]}" rpy="{rpy_rad[0]:.4f} {rpy_rad[1]:.4f} {rpy_rad[2]:.4f}"')
+                writer.start(L3, "geometry")
+                if shape == "Box": writer.tag(L4, "box", f'size="{dims[0]} {dims[1]} {dims[2]}"')
+                elif shape == "Sphere": writer.tag(L4, "sphere", f'radius="{dims[0]}"')
+                else: writer.tag(L4, "cylinder", f'radius="{dims[0]}" length="{dims[1]}"')
+                writer.end(L3, "geometry")
+
             writer.material(L3, "base_grey", 0.2, 0.2, 0.2)
             writer.end(L2, "visual")
-            
-        # [우선순위 3] 둘 다 아니면 Visual 없음 (투명)
 
+        # Base Inertia
         if inertia_data and len(inertia_data) > 0:
             d = inertia_data[0]
             writer.inertial(L2, mass=d.get('m', 1.0), xyz=(d.get('x',0), d.get('y',0), d.get('z',0)),
@@ -93,61 +150,121 @@ class URDFManager:
                             iyy=d.get('iyy', 0.01), iyz=d.get('iyz', 0), izz=d.get('izz', 0.01))
         else:
             writer.inertial(L2, mass=10.0)
-
         writer.end(L1, "link")
 
         # --- Joints Loop ---
         for i, j in enumerate(joints):
-            parent = "body" if i == 0 else f"link_{i-1}"
-            child = f"link_{i}"
+            j_name = j.get('name', f"joint_{i}")
+            p_link = j.get('parent', base_link_name)
+            c_link = j.get('child', f"link_{i}")
             
             xyz = f"{j['x']} {j['y']} {j['z']}"
             rpy = f"{self._deg_to_rad(j['r']):.4f} {self._deg_to_rad(j['p']):.4f} {self._deg_to_rad(j['yaw']):.4f}"
             axis = self._get_axis_vector(j['axis'])
             low, up = self._deg_to_rad(j['low']), self._deg_to_rad(j['up'])
+            j_type = j.get('type', 'revolute')
 
-            writer.start(L1, "joint", f'name="joint_{i}" type="revolute"')
-            writer.tag(L2, "parent", f'link="{parent}"')
-            writer.tag(L2, "child", f'link="{child}"')
+            # 1. Write Joint
+            writer.start(L1, "joint", f'name="{j_name}" type="{j_type}"')
+            writer.tag(L2, "parent", f'link="{p_link}"')
+            writer.tag(L2, "child", f'link="{c_link}"')
             writer.tag(L2, "origin", f'xyz="{xyz}" rpy="{rpy}"')
             writer.tag(L2, "axis", f'xyz="{axis}"')
             writer.tag(L2, "limit", f'lower="{low:.4f}" upper="{up:.4f}" effort="10" velocity="1"')
             writer.end(L1, "joint")
 
-            writer.start(L1, "link", f'name="{child}"')
+            # 2. Write Child Link
+            writer.start(L1, "link", f'name="{c_link}"')
 
-            is_last_link = (i == len(joints) - 1)
-            if not is_last_link:
-                next_j = joints[i+1]
-                dx, dy, dz = float(next_j['x']), float(next_j['y']), float(next_j['z'])
-                vis_mode = j.get('vis_type', 'Auto (Cylinder)')
-
+            vis_mode = j.get('vis_type', 'Auto (Cylinder)')
+            
+            # --- Visual Geometry Logic ---
+            
+            # Case A: Mesh
+            if vis_mode == 'Mesh':
                 writer.start(L2, "visual")
-                if vis_mode == 'Mesh':
-                    writer.tag(L3, "origin", 'xyz="0 0 0" rpy="0 0 0"')
-                    writer.start(L3, "geometry")
-                    path = j.get('vis_mesh', "package://ur_description/meshes/default.stl")
-                    writer.tag(L4, "mesh", f'filename="{path}" scale="0.001 0.001 0.001"')
-                    writer.end(L3, "geometry")
-                elif vis_mode == 'Auto (Box)':
-                    (cx, cy, cz), (lx, ly, lz) = self._calc_box_geometry(dx, dy, dz)
-                    writer.tag(L3, "origin", f'xyz="{cx:.4f} {cy:.4f} {cz:.4f}" rpy="0 0 0"')
-                    writer.start(L3, "geometry")
-                    writer.tag(L4, "box", f'size="{lx:.4f} {ly:.4f} {lz:.4f}"')
-                    writer.end(L3, "geometry")
-                else: 
-                    (cx, cy, cz), (rr, pp, yy), (ln, rad) = self._calc_cylinder_geometry(dx, dy, dz)
-                    writer.tag(L3, "origin", f'xyz="{cx:.4f} {cy:.4f} {cz:.4f}" rpy="{rr:.4f} {pp:.4f} {yy:.4f}"')
-                    writer.start(L3, "geometry")
-                    writer.tag(L4, "cylinder", f'radius="{rad:.4f}" length="{ln:.4f}"')
-                    writer.end(L3, "geometry")
-
-                # [색상 수정] 짝수 링크: 밝은 회색(0.8), 홀수 링크: 짙은 회색(0.4)
-                c_val = 0.8 if i % 2 == 0 else 0.4
-                writer.material(L3, f"mat_{i}", c_val, c_val, c_val, 1.0)
+                v_xyz = f"{j.get('vis_x', 0)} {j.get('vis_y', 0)} {j.get('vis_z', 0)}"
+                v_rpy = f"{self._deg_to_rad(j.get('vis_roll', 0)):.4f} {self._deg_to_rad(j.get('vis_pitch', 0)):.4f} {self._deg_to_rad(j.get('vis_yaw', 0)):.4f}"
+                writer.tag(L3, "origin", f'xyz="{v_xyz}" rpy="{v_rpy}"')
+                writer.start(L3, "geometry")
+                path = j.get('vis_mesh', "package://ur_description/meshes/default.stl")
+                writer.tag(L4, "mesh", f'filename="{path}" scale="0.001 0.001 0.001"')
+                writer.end(L3, "geometry")
+                writer.material(L3, f"mat_{i}", 0.6, 0.6, 0.6)
+                writer.end(L2, "visual")
+            
+            # Case B: Manual
+            elif vis_mode.startswith('Manual'):
+                writer.start(L2, "visual")
+                shape = vis_mode.split('(')[1][:-1]
+                v_xyz = f"{j.get('vis_x', 0)} {j.get('vis_y', 0)} {j.get('vis_z', 0)}"
+                v_rpy = f"{self._deg_to_rad(j.get('vis_roll', 0)):.4f} {self._deg_to_rad(j.get('vis_pitch', 0)):.4f} {self._deg_to_rad(j.get('vis_yaw', 0)):.4f}"
+                writer.tag(L3, "origin", f'xyz="{v_xyz}" rpy="{v_rpy}"')
                 
+                writer.start(L3, "geometry")
+                if shape == "Box":
+                        writer.tag(L4, "box", f'size="{j.get("vis_dim1", 0.1)} {j.get("vis_dim2", 0.1)} {j.get("vis_dim3", 0.1)}"')
+                elif shape == "Sphere":
+                        writer.tag(L4, "sphere", f'radius="{j.get("vis_dim1", 0.1)}"')
+                else: # Cylinder
+                        writer.tag(L4, "cylinder", f'radius="{j.get("vis_dim1", 0.05)}" length="{j.get("vis_dim2", 0.2)}"')
+                writer.end(L3, "geometry")
+                writer.material(L3, f"mat_{i}", 0.6, 0.6, 0.6)
                 writer.end(L2, "visual")
 
+            # Case C: Auto (Tree Visualization)
+            else:
+                next_joints = child_map.get(c_link, [])
+                
+                # C-1. 자식 조인트가 없는 경우 (Leaf Node) -> 끝단 표시용 아주 작은 빨간 구
+                if not next_joints:
+                    writer.start(L2, "visual")
+                    writer.tag(L3, "origin", 'xyz="0 0 0" rpy="0 0 0"')
+                    writer.start(L3, "geometry")
+                    # [수정] 반지름을 0.02로 작게, 색상은 빨간색으로
+                    writer.tag(L4, "sphere", 'radius="0.02"') 
+                    writer.end(L3, "geometry")
+                    
+                    # [수정] Material Red
+                    writer.start(L3, "material", f'name="end_effector_{i}"')
+                    writer.tag(L4, "color", 'rgba="1.0 0.0 0.0 1.0"')
+                    writer.end(L3, "material")
+                    
+                    writer.end(L2, "visual")
+                
+                # C-2. 자식 조인트가 있는 경우 -> 각 자식 조인트 위치까지 도형 생성
+                else:
+                    # [수정] 색상 생성 로직: 인덱스에 따라 다채로운 색상 부여
+                    # 예: (0.2, 0.5, 0.8) 베이스에 인덱스로 변화를 줌
+                    r = (i * 37 % 100) / 100.0
+                    g = (i * 59 % 100) / 100.0
+                    b = (i * 83 % 100) / 100.0
+                    # 너무 어두우면 밝게 보정
+                    if r+g+b < 1.0: r+=0.2; g+=0.2; b+=0.2
+                    
+                    for nj in next_joints:
+                        dx, dy, dz = float(nj['x']), float(nj['y']), float(nj['z'])
+                        
+                        writer.start(L2, "visual") 
+                        
+                        if vis_mode == 'Auto (Box)':
+                            (cx, cy, cz), (lx, ly, lz) = self._calc_box_geometry(dx, dy, dz)
+                            writer.tag(L3, "origin", f'xyz="{cx:.4f} {cy:.4f} {cz:.4f}" rpy="0 0 0"')
+                            writer.start(L3, "geometry")
+                            writer.tag(L4, "box", f'size="{lx:.4f} {ly:.4f} {lz:.4f}"')
+                            writer.end(L3, "geometry")
+                        else: # Auto (Cylinder)
+                            (cx, cy, cz), (rr, pp, yy), (ln, rad) = self._calc_cylinder_geometry(dx, dy, dz)
+                            writer.tag(L3, "origin", f'xyz="{cx:.4f} {cy:.4f} {cz:.4f}" rpy="{rr:.4f} {pp:.4f} {yy:.4f}"')
+                            writer.start(L3, "geometry")
+                            writer.tag(L4, "cylinder", f'radius="{rad:.4f}" length="{ln:.4f}"')
+                            writer.end(L3, "geometry")
+                        
+                        # 생성한 고유 색상 적용
+                        writer.material(L3, f"mat_branch_{i}", r, g, b)
+                        writer.end(L2, "visual")
+
+            # --- Collision ---
             if j.get('col_enabled', False):
                 writer.start(L2, "collision")
                 c_xyz = f"{j.get('col_x', 0)} {j.get('col_y', 0)} {j.get('col_z', 0)}"
@@ -164,6 +281,7 @@ class URDFManager:
                 writer.end(L3, "geometry")
                 writer.end(L2, "collision")
 
+            # --- Inertia ---
             data_idx = i + 1
             if inertia_data and len(inertia_data) > data_idx:
                 d = inertia_data[data_idx]

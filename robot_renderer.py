@@ -173,6 +173,8 @@ class RobotRenderer:
             res.append({
                 'name': name,
                 'type': j['type'],
+                'parent': j['parent'],
+                'child': j['child'],
                 'min': j['limits'][0],
                 'max': j['limits'][1],
                 'axis': j['axis']
