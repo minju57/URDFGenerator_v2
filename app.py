@@ -21,4 +21,4 @@ with gr.Blocks(title="URDF Builder", css=css, head=js_head) as demo:
             build_visualizer_tab()
 
 if __name__ == "__main__":
-    demo.launch(share=True)
+    demo.launch()
