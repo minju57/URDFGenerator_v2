@@ -123,9 +123,14 @@ def draw_tree_diagram(joints, selected_idx, base_joint):
         A.edge_attr.update(penwidth='1.2')
         svg_code = A.draw(format='svg', prog='dot').decode('utf-8')
         # CSP-safe: javascript: URI를 data-joint-idx 속성으로 교체
+        # svg_code = re.sub(
+        #     r'(?:xlink:)?href="javascript:window\.select_joint_js\((-?\d+)\);"',
+        #     r'data-joint-idx="\1"',
+        #     svg_code
+        # )
         svg_code = re.sub(
-            r'(?:xlink:)?href="javascript:window\.select_joint_js\((-?\d+)\);"',
-            r'data-joint-idx="\1"',
+            r'(?:xlink:)?href=([\'"])javascript:window\.select_joint_js(?:[(]|&#40;)(-?\d+)(?:[)]|&#41;);?\1',
+            r'data-joint-idx="\2"',
             svg_code
         )
         return f"<div style='width: 100%; overflow-x: auto; padding: 10px; text-align: center;'>{svg_code}</div>"
