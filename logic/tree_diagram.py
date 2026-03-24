@@ -129,8 +129,8 @@ def draw_tree_diagram(joints, selected_idx, base_joint):
         #     svg_code
         # )
         svg_code = re.sub(
-            r'(?:xlink:)?href=([\'"])javascript:window\.select_joint_js(?:[(]|&#40;)(-?\d+)(?:[)]|&#41;);?\1',
-            r'data-joint-idx="\2"',
+            r'(?:xlink:)?href=["\']?javascript:window\.select_joint_js\(?&#40;?(-?\d+)\)?&#41;?;?["\']?',
+            r'data-joint-idx="\1"',
             svg_code
         )
         return f"<div style='width: 100%; overflow-x: auto; padding: 10px; text-align: center;'>{svg_code}</div>"
