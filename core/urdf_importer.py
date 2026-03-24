@@ -1,6 +1,8 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class URDFImporter:
     def __init__(self):
@@ -77,14 +79,30 @@ class URDFImporter:
         child_link_names = set()
         
         joints_data = []
+        base_joint_origin_xyz = [0.0, 0.0, 1.0]
+        base_joint_origin_rpy = [0.0, 0.0, 0.0]
+        base_mode = 'Fixed'
+        found_base_joint = False
+
+        # base joint (world_to_base 또는 floating_base) 파싱
+        for joint in joints_list:
+            jname = joint.get('name', '')
+            if jname in ('world_to_base', 'floating_base'):
+                found_base_joint = True
+                base_mode = 'Fixed' if jname == 'world_to_base' else 'Floating'
+                origin = joint.find('origin')
+                if origin is not None:
+                    base_joint_origin_xyz = [float(v) for v in origin.get('xyz', '0 0 1').split()]
+                    base_joint_origin_rpy = [float(v) for v in origin.get('rpy', '0 0 0').split()]
+                break
 
         for joint in joints_list:
             # child 등록
             c_name = joint.find('child').get('link')
             child_link_names.add(c_name)
-            
+
             # --- 기존 조인트 파싱 로직 (그대로 유지) ---
-            if joint.get('name') == 'world_to_base': continue
+            if joint.get('name') in ('world_to_base', 'floating_base'): continue
 
             j_type = joint.get('type', 'revolute')
             data = {
@@ -154,39 +172,56 @@ class URDFImporter:
             
             joints_data.append(data)
 
-        # 3. Base Link 정보 추출
-        # (전체 링크 집합) - (누군가의 자식인 링크 집합) = Base Link 후보
-        root_candidates = list(all_link_names - child_link_names)
-        base_data = None
-        
-        if root_candidates:
-            root_name = root_candidates[0] # 첫 번째 후보를 Base로 간주
-            root_elem = links_dict[root_name]
-            
-            # Base UI 업데이트를 위한 기본 구조
-            base_data = {
-                'name': root_name,
-                'type': 'None', 'mesh': '',
-                'dim': [0,0,0], # UI는 개별 변수(d1, d2...)를 쓰지만 딕셔너리로 묶음
-                'xyz': [0,0,0], 'rpy': [0,0,0]
-            }
-            
-            # Base Visual 파싱
-            vis = root_elem.find('visual')
+        # 3. Base Joint 정보 구성 (URDF에 world_to_base/floating_base가 없으면 sentinel 반환)
+        if not found_base_joint:
+            return joints_data, {'no_base': True}
+
+        from logic.joint_logic import get_default_base_joint
+        base_joint = get_default_base_joint()
+        base_joint['mode'] = base_mode
+        base_joint['name'] = 'world_to_base' if base_mode == 'Fixed' else 'floating_base'
+        base_joint['x'] = base_joint_origin_xyz[0] * 1000.0
+        base_joint['y'] = base_joint_origin_xyz[1] * 1000.0
+        base_joint['z'] = base_joint_origin_xyz[2] * 1000.0
+        base_joint['r'] = self._rad_to_deg(base_joint_origin_rpy[0])
+        base_joint['p'] = self._rad_to_deg(base_joint_origin_rpy[1])
+        base_joint['yaw'] = self._rad_to_deg(base_joint_origin_rpy[2])
+
+        # base_link visual/collision 파싱
+        base_link_name = 'base_link'
+        if base_link_name in links_dict:
+            bl = links_dict[base_link_name]
+            vis = bl.find('visual')
             if vis is not None:
-                # Origin (XYZ, RPY)
-                xyz, rpy = self._parse_origin(vis)
-                base_data['xyz'] = [v*1000 for v in xyz]
-                base_data['rpy'] = [self._rad_to_deg(v) for v in rpy]
-                
-                # Geometry
+                v_xyz, v_rpy = self._parse_origin(vis)
+                base_joint['vis_x'] = v_xyz[0] * 1000
+                base_joint['vis_y'] = v_xyz[1] * 1000
+                base_joint['vis_z'] = v_xyz[2] * 1000
+                base_joint['vis_roll'] = self._rad_to_deg(v_rpy[0])
+                base_joint['vis_pitch'] = self._rad_to_deg(v_rpy[1])
+                base_joint['vis_yaw'] = self._rad_to_deg(v_rpy[2])
                 g_type, dims, path = self._parse_geometry(vis.find('geometry'))
                 if g_type == 'Mesh':
-                    base_data['type'] = 'Mesh'
-                    base_data['mesh'] = path
+                    base_joint['vis_type'] = 'Mesh'
+                    base_joint['vis_mesh'] = path
                 elif g_type != 'None':
-                    base_data['type'] = f"Manual ({g_type})" # UI 포맷 맞춤
-                    base_data['dim'] = dims
-        
-        # 리턴: (조인트 데이터 리스트, 베이스 데이터 딕셔너리)
-        return joints_data, base_data
+                    base_joint['vis_type'] = f'Manual ({g_type})'
+                    base_joint['vis_dim1'], base_joint['vis_dim2'], base_joint['vis_dim3'] = dims
+                # else: keep Auto (Cylinder)
+            col = bl.find('collision')
+            if col is not None:
+                base_joint['col_enabled'] = True
+                c_xyz, c_rpy = self._parse_origin(col)
+                base_joint['col_x'] = c_xyz[0] * 1000
+                base_joint['col_y'] = c_xyz[1] * 1000
+                base_joint['col_z'] = c_xyz[2] * 1000
+                base_joint['col_roll'] = self._rad_to_deg(c_rpy[0])
+                base_joint['col_pitch'] = self._rad_to_deg(c_rpy[1])
+                base_joint['col_yaw'] = self._rad_to_deg(c_rpy[2])
+                g_type, dims, _ = self._parse_geometry(col.find('geometry'))
+                if g_type not in ('None', 'Mesh'):
+                    base_joint['col_type'] = g_type
+                    base_joint['col_dim1'], base_joint['col_dim2'], base_joint['col_dim3'] = dims
+
+        # 리턴: (조인트 데이터 리스트, 베이스 조인트 딕셔너리)
+        return joints_data, base_joint

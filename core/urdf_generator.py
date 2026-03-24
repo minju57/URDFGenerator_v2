@@ -41,11 +41,15 @@ class URDFManager:
         lz = abs(dz) if abs(dz) > 1e-3 else 0.05
         return (cx, cy, cz), (lx, ly, lz)
 
-    def generate(self, joints, filename="robot.urdf", base_data=None, inertia_data=None, robot_name="generated_robot", base_mode="Fixed Base"):
+    def generate(self, joints, filename="robot.urdf", base_joint=None, inertia_data=None, robot_name="generated_robot",is_imported=False):
         writer = URDFWriter()
         L0, L1, L2, L3, L4 = "", "  ", "    ", "      ", "        "
 
-        # [1] 트리 구조 분석: 각 링크가 어떤 자식 조인트들을 가지고 있는지 매핑
+        # if base_joint is None:
+        #     from logic.joint_logic import get_default_base_joint
+        #     base_joint = get_default_base_joint()
+
+        # [1] 트리 구조 분석
         child_map = {}
         for j in joints:
             p = j['parent']
@@ -55,100 +59,125 @@ class URDFManager:
         writer.xml_header()
         writer.start(L0, "robot", f'name="{robot_name}"')
         writer.mujoco_setting(L1)
-        base_link_name = "base_link"
 
-        # --- World Fixed Joint ---
-        if base_mode == "Fixed Base":
-            # --- Option A: Fixed Base (기존 방식) ---
-            writer.tag(L1, "link", 'name="world"')
-            
-            writer.start(L1, "joint", 'name="world_to_base" type="fixed"')
-            writer.tag(L2, "parent", 'link="world"')
-            writer.tag(L2, "child", f'link="{base_link_name}"')
-            writer.tag(L2, "origin", 'xyz="0 0 1.0" rpy="0 0 0"') 
-            writer.end(L1, "joint")
-            
-        else:
-            # --- Option B: Floating Base (요청하신 방식) ---
-            # 1. dummy 'base' link 생성
-            writer.start(L1, "link", 'name="base"')
-            writer.start(L2, "visual")
-            writer.tag(L3, "origin", 'rpy="0 0 0" xyz="0 0 0"')
-            writer.start(L3, "geometry")
-            writer.tag(L4, "box", 'size="0.001 0.001 0.001"')
-            writer.end(L3, "geometry")
-            writer.end(L2, "visual")
+        has_base = not is_imported and base_joint is not None and not base_joint.get('no_base')
+
+        if has_base:
+            base_link_name = base_joint.get('child', 'base_link') if base_joint is not None else 'base_link'
+
+            mode = base_joint.get('mode', 'Fixed')
+            bj_x = base_joint.get('x', 0.0) / 1000.0
+            bj_y = base_joint.get('y', 0.0) / 1000.0
+            bj_z = base_joint.get('z', 1000.0) / 1000.0
+            bj_r = self._deg_to_rad(base_joint.get('r', 0.0))
+            bj_p = self._deg_to_rad(base_joint.get('p', 0.0))
+            bj_yaw = self._deg_to_rad(base_joint.get('yaw', 0.0))
+
+            if mode == 'Fixed':
+                writer.tag(L1, "link", 'name="world"')
+                writer.start(L1, "joint", 'name="world_to_base" type="fixed"')
+                writer.tag(L2, "parent", 'link="world"')
+                writer.tag(L2, "child", f'link="{base_link_name}"')
+                writer.tag(L2, "origin", f'xyz="{bj_x} {bj_y} {bj_z}" rpy="{bj_r:.4f} {bj_p:.4f} {bj_yaw:.4f}"')
+                writer.end(L1, "joint")
+            else:
+                writer.start(L1, "link", 'name="base"')
+                writer.start(L2, "visual")
+                writer.tag(L3, "origin", 'rpy="0 0 0" xyz="0 0 0"')
+                writer.start(L3, "geometry")
+                writer.tag(L4, "box", 'size="0.001 0.001 0.001"')
+                writer.end(L3, "geometry")
+                writer.end(L2, "visual")
+                writer.end(L1, "link")
+                writer.start(L1, "joint", 'name="floating_base" type="floating"')
+                writer.tag(L2, "origin", f'xyz="{bj_x} {bj_y} {bj_z}" rpy="{bj_r:.4f} {bj_p:.4f} {bj_yaw:.4f}"')
+                writer.tag(L2, "parent", 'link="base"')
+                writer.tag(L2, "child", f'link="{base_link_name}"')
+                writer.end(L1, "joint")
+
+            # --- Base Link ---
+            writer.start(L1, "link", f'name="{base_link_name}"')
+
+            base_vis_type = base_joint.get('vis_type', 'Auto (Cylinder)')
+
+            if base_vis_type != "None":
+                writer.start(L2, "visual")
+
+                if base_vis_type == 'Auto (Cylinder)':
+                    body_radius = 0.08
+                    connected_joints = child_map.get(base_link_name, [])
+                    if connected_joints:
+                        j0 = connected_joints[0]
+                        dist = np.sqrt(j0['x']**2 + j0['y']**2)
+                        if dist > 0.05: body_radius = dist * 1.1
+                    writer.tag(L3, "origin", 'xyz="0 0 -0.5" rpy="0 0 0"')
+                    writer.start(L3, "geometry")
+                    writer.tag(L4, "cylinder", f'radius="{body_radius:.4f}" length="1.0"')
+                    writer.end(L3, "geometry")
+
+                elif base_vis_type == 'Auto (Box)':
+                    body_size = 0.16
+                    writer.tag(L3, "origin", 'xyz="0 0 -0.5" rpy="0 0 0"')
+                    writer.start(L3, "geometry")
+                    writer.tag(L4, "box", f'size="{body_size} {body_size} 1.0"')
+                    writer.end(L3, "geometry")
+
+                elif base_vis_type == 'Mesh':
+                    v_xyz = f"{base_joint.get('vis_x', 0)/1000.0} {base_joint.get('vis_y', 0)/1000.0} {base_joint.get('vis_z', 0)/1000.0}"
+                    v_rpy = f"{self._deg_to_rad(base_joint.get('vis_roll', 0)):.4f} {self._deg_to_rad(base_joint.get('vis_pitch', 0)):.4f} {self._deg_to_rad(base_joint.get('vis_yaw', 0)):.4f}"
+                    writer.tag(L3, "origin", f'xyz="{v_xyz}" rpy="{v_rpy}"')
+                    writer.start(L3, "geometry")
+                    writer.tag(L4, "mesh", f'filename="{base_joint.get("vis_mesh", "")}" scale="0.001 0.001 0.001"')
+                    writer.end(L3, "geometry")
+
+                elif base_vis_type.startswith('Manual'):
+                    shape = base_vis_type.split('(')[1][:-1]
+                    dims = [base_joint.get('vis_dim1', 50.0)/1000.0,
+                            base_joint.get('vis_dim2', 100.0)/1000.0,
+                            base_joint.get('vis_dim3', 50.0)/1000.0]
+                    v_xyz = f"{base_joint.get('vis_x', 0)/1000.0} {base_joint.get('vis_y', 0)/1000.0} {base_joint.get('vis_z', 0)/1000.0}"
+                    v_rpy = f"{self._deg_to_rad(base_joint.get('vis_roll', 0)):.4f} {self._deg_to_rad(base_joint.get('vis_pitch', 0)):.4f} {self._deg_to_rad(base_joint.get('vis_yaw', 0)):.4f}"
+                    writer.tag(L3, "origin", f'xyz="{v_xyz}" rpy="{v_rpy}"')
+                    writer.start(L3, "geometry")
+                    if shape == "Box": writer.tag(L4, "box", f'size="{dims[0]} {dims[1]} {dims[2]}"')
+                    elif shape == "Sphere": writer.tag(L4, "sphere", f'radius="{dims[0]}"')
+                    else: writer.tag(L4, "cylinder", f'radius="{dims[0]}" length="{dims[1]}"')
+                    writer.end(L3, "geometry")
+
+                writer.material(L3, "base_grey", 0.2, 0.2, 0.2)
+                writer.end(L2, "visual")
+
+            # Base Link Collision
+            if base_joint.get('col_enabled', False):
+                writer.start(L2, "collision")
+                c_xyz = f"{base_joint.get('col_x', 0)/1000.0} {base_joint.get('col_y', 0)/1000.0} {base_joint.get('col_z', 0)/1000.0}"
+                c_rpy = f"{self._deg_to_rad(base_joint.get('col_roll', 0)):.4f} {self._deg_to_rad(base_joint.get('col_pitch', 0)):.4f} {self._deg_to_rad(base_joint.get('col_yaw', 0)):.4f}"
+                writer.tag(L3, "origin", f'xyz="{c_xyz}" rpy="{c_rpy}"')
+                writer.start(L3, "geometry")
+                c_type = base_joint.get('col_type', 'Cylinder')
+                c_dims = [base_joint.get('col_dim1', 50.0)/1000.0,
+                          base_joint.get('col_dim2', 100.0)/1000.0,
+                          base_joint.get('col_dim3', 50.0)/1000.0]
+                if c_type == "Box": writer.tag(L4, "box", f'size="{c_dims[0]} {c_dims[1]} {c_dims[2]}"')
+                elif c_type == "Sphere": writer.tag(L4, "sphere", f'radius="{c_dims[0]}"')
+                else: writer.tag(L4, "cylinder", f'radius="{c_dims[0]}" length="{c_dims[1]}"')
+                writer.end(L3, "geometry")
+                writer.end(L2, "collision")
+
+            # Base Inertia
+            if inertia_data and len(inertia_data) > 0:
+                d = inertia_data[0]
+                writer.inertial(L2, mass=d.get('mass', d.get('m', 1.0)), xyz=(d.get('com_x', d.get('x', 0)), d.get('com_y', d.get('y', 0)), d.get('com_z', d.get('z', 0))),
+                                ixx=d.get('ixx', 0.01), ixy=d.get('ixy', 0), ixz=d.get('ixz', 0),
+                                iyy=d.get('iyy', 0.01), iyz=d.get('iyz', 0), izz=d.get('izz', 0.01))
+            else:
+                writer.inertial(L2, mass=10.0)
             writer.end(L1, "link")
-
-            # 2. 'floating_base' joint 생성 (base -> base_link)
-            writer.start(L1, "joint", 'name="floating_base" type="floating')
-            writer.tag(L2, "origin", 'rpy="0 0 0" xyz="0 0 0"')
-            writer.tag(L2, "parent", 'link="base"')
-            writer.tag(L2, "child", f'link="{base_link_name}"')
-            writer.end(L1, "joint")
-
-        # --- Base Link ---
-        writer.start(L1, "link", f'name="{base_link_name}"')
-        
-        base_type = base_data.get('type', 'Auto (Cylinder)')
-        
-        if base_type != "None":
-            writer.start(L2, "visual")
-            
-            # 1. Auto (Cylinder) for Base
-            if base_type == 'Auto (Cylinder)':
-                body_radius = 0.08
-                connected_joints = child_map.get(base_link_name, [])
-                if connected_joints:
-                    j0 = connected_joints[0]
-                    dist = np.sqrt(j0['x']**2 + j0['y']**2)
-                    if dist > 0.05: body_radius = dist * 1.1
-                
-                writer.tag(L3, "origin", 'xyz="0 0 -0.5" rpy="0 0 0"')
-                writer.start(L3, "geometry")
-                writer.tag(L4, "cylinder", f'radius="{body_radius:.4f}" length="1.0"')
-                writer.end(L3, "geometry")
-
-            # 2. Mesh
-            elif base_type == 'Mesh':
-                writer.tag(L3, "origin", 'xyz="0 0 0" rpy="0 0 0"')
-                writer.start(L3, "geometry")
-                path = base_data.get('mesh', "")
-                writer.tag(L4, "mesh", f'filename="{path}" scale="0.001 0.001 0.001"')
-                writer.end(L3, "geometry")
-                
-            # 3. Manual
-            elif base_type.startswith("Manual"):
-                shape = base_type.split('(')[1][:-1]
-                dims = base_data.get('dim', [0.05, 0.05, 0.05])
-                xyz = base_data.get('xyz', [0,0,0])
-                rpy_deg = base_data.get('rpy', [0,0,0])
-                rpy_rad = [self._deg_to_rad(v) for v in rpy_deg]
-                
-                writer.tag(L3, "origin", f'xyz="{xyz[0]} {xyz[1]} {xyz[2]}" rpy="{rpy_rad[0]:.4f} {rpy_rad[1]:.4f} {rpy_rad[2]:.4f}"')
-                writer.start(L3, "geometry")
-                if shape == "Box": writer.tag(L4, "box", f'size="{dims[0]} {dims[1]} {dims[2]}"')
-                elif shape == "Sphere": writer.tag(L4, "sphere", f'radius="{dims[0]}"')
-                else: writer.tag(L4, "cylinder", f'radius="{dims[0]}" length="{dims[1]}"')
-                writer.end(L3, "geometry")
-
-            writer.material(L3, "base_grey", 0.2, 0.2, 0.2)
-            writer.end(L2, "visual")
-
-        # Base Inertia
-        if inertia_data and len(inertia_data) > 0:
-            d = inertia_data[0]
-            writer.inertial(L2, mass=d.get('m', 1.0), xyz=(d.get('x',0), d.get('y',0), d.get('z',0)),
-                            ixx=d.get('ixx', 0.01), ixy=d.get('ixy', 0), ixz=d.get('ixz', 0),
-                            iyy=d.get('iyy', 0.01), iyz=d.get('iyz', 0), izz=d.get('izz', 0.01))
-        else:
-            writer.inertial(L2, mass=10.0)
-        writer.end(L1, "link")
 
         # --- Joints Loop ---
         for i, j in enumerate(joints):
             j_name = j.get('name', f"joint_{i}")
-            p_link = j.get('parent', base_link_name)
+            p_link = j.get('parent', base_link_name if has_base else 'base_link')
             c_link = j.get('child', f"link_{i}")
             
             xyz = f"{j['x']} {j['y']} {j['z']}"
@@ -278,7 +307,7 @@ class URDFManager:
             data_idx = i + 1
             if inertia_data and len(inertia_data) > data_idx:
                 d = inertia_data[data_idx]
-                writer.inertial(L2, mass=d.get('m', 1.0), xyz=(d.get('x',0), d.get('y',0), d.get('z',0)),
+                writer.inertial(L2, mass=d.get('mass', d.get('m', 1.0)), xyz=(d.get('com_x', d.get('x', 0)), d.get('com_y', d.get('y', 0)), d.get('com_z', d.get('z', 0))),
                                 ixx=d.get('ixx', 0.01), ixy=d.get('ixy', 0), ixz=d.get('ixz', 0),
                                 iyy=d.get('iyy', 0.01), iyz=d.get('iyz', 0), izz=d.get('izz', 0.01))
             else:
