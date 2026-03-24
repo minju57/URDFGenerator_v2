@@ -1,7 +1,7 @@
 gradio
 numpy
 urdfpy
-networkx
+networkx>=2.6.3
 lxml
 scipy
 pycollada
