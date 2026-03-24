@@ -21,4 +21,9 @@ with gr.Blocks(title="URDF Builder", css=css, head=js_head) as demo:
             build_visualizer_tab()
 
 if __name__ == "__main__":
-    demo.launch()
+    import os
+    demo.launch(
+        server_name=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
+        server_port=int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860))),
+        allowed_paths=["assets"],
+    )

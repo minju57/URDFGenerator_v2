@@ -1,0 +1,9 @@
+.git
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.gradio
+*.urdf
+robot_scene.glb
+.vscode
