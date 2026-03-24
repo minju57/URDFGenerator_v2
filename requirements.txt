@@ -1,77 +1,9 @@
-aiofiles @ file:///home/task_175878393050729/conda-bld/aiofiles_1758783990559/work
-annotated-doc @ file:///home/task_176337172422305/conda-bld/annotated-doc_1763372656206/work
-annotated-types @ file:///home/task_176174488044141/conda-bld/annotated-types_1761744921564/work
-anyio @ file:///home/task_175862240021031/conda-bld/anyio_1758622416828/work
-Bottleneck @ file:///home/task_176193794808509/conda-bld/bottleneck_1761937988290/work
-Brotli @ file:///home/task_176236326814258/conda-bld/brotli-split_1762363408865/work
-certifi @ file:///home/task_176765898807400/croot/certifi_1767659142395/work/certifi
-click @ file:///home/task_176433224254364/conda-bld/click_1764332289389/work
-dnspython @ file:///home/task_176371777174369/conda-bld/dnspython_1763718230959/work
-email-validator @ file:///home/task_175861018619500/conda-bld/email-validator-meta_1758610236932/work
-et_xmlfile==2.0.0
-exceptiongroup @ file:///home/task_176156033398806/conda-bld/exceptiongroup_1761560346388/work
-fastapi @ file:///home/task_176840025695362/croot/fastapi-split_1768401372229/work
-fastapi-cli @ file:///home/task_176837295597811/croot/fastapi-cli_1768373417232/work
-ffmpy @ file:///home/task_177099515848359/croot/ffmpy_1770995578401/work
-filelock @ file:///home/task_176943957887863/croot/filelock_1769440496799/work
-fsspec @ file:///home/task_176889820975143/croot/fsspec_1768898273319/work
-gradio @ file:///home/task_176343465373301/conda-bld/gradio_1763435251767/work
-gradio_client @ file:///home/task_176341741709333/conda-bld/gradio-client_1763417738996/work
-groovy @ file:///home/task_176341772406009/conda-bld/groovy-python_1763417801708/work
-h11 @ file:///home/task_176193128294608/conda-bld/h11_1761931294516/work
-hf-xet @ file:///home/task_176967406360766/croot/hf-xet_1769674366107/work
-httpcore @ file:///croot/httpcore_1748526048470/work
-httptools @ file:///home/task_176363473954255/conda-bld/httptools_1763634753251/work
-httpx @ file:///home/task_176044729065927/conda-bld/httpx_1760447346377/work
-huggingface_hub @ file:///home/task_177020984437960/croot/huggingface_hub_1770209867492/work
-idna @ file:///home/task_176191177045451/conda-bld/idna_1761911980742/work
-Jinja2 @ file:///croot/jinja2_1741710844255/work
-markdown-it-py @ file:///home/task_176700162619375/croot/markdown-it-py_1767001692156/work
-MarkupSafe @ file:///croot/markupsafe_1738584038848/work
-mdurl @ file:///home/task_175855217171549/conda-bld/mdurl_1758552186399/work
-mkl-service==2.5.2
-mkl_fft @ file:///home/task_176159252575002/conda-bld/mkl_fft_1761592901585/work
-mkl_random @ file:///home/task_176159293813909/conda-bld/mkl_random_1761592952512/work
-narwhals @ file:///home/task_176000268477610/conda-bld/narwhals_1760003493528/work
-networkx @ file:///croot/networkx_1737039604450/work
-numexpr @ file:///home/task_176216559424661/conda-bld/numexpr_1762165604917/work
-numpy @ file:///home/task_176157872663408/conda-bld/numpy_and_numpy_base_1761579342634/work/dist/numpy-2.2.5-cp310-cp310-linux_x86_64.whl#sha256=fb5b85b589f86e6404be6a37347b98be70b32c4ae837bb26e1180e9f9a7fb718
-openpyxl==3.1.5
-orjson @ file:///home/task_177194589080018/croot/orjson_1771945915821/work
-packaging @ file:///home/task_176104877067765/conda-bld/packaging_1761049113113/work
-pandas @ file:///home/task_176233228161209/conda-bld/pandas_1762332325727/work/dist/pandas-2.3.3-cp310-cp310-linux_x86_64.whl#sha256=cd4241f338dbf9922b2bc5a62ff6267574e607e9e9ea8b5efbba07b037c96f8f
-pillow @ file:///croot/pillow_1752524526621/work
-plotly @ file:///home/task_176425467075927/conda-bld/plotly_1764254683633/work
-pydantic @ file:///home/task_175873696135138/conda-bld/pydantic_1758737010063/work
-pydantic-extra-types @ file:///home/task_176830850145875/croot/pydantic-extra-types_1768308523181/work
-pydantic-settings @ file:///home/task_176416497869754/conda-bld/pydantic-settings_1764165137345/work
-pydantic_core @ file:///croot/pydantic-core_1750754736071/work
-pydub @ file:///home/task_176341782082136/conda-bld/pydub_1763417876138/work
-Pygments @ file:///home/task_176243133176773/conda-bld/pygments_1762431407223/work
-pygraphviz @ file:///croot/pygraphviz_1743018474242/work
-python-dateutil @ file:///croot/python-dateutil_1716495738603/work
-python-dotenv @ file:///home/task_176855882547294/croot/python-dotenv_1768559689054/work
-python-multipart @ file:///home/task_177021303881811/croot/python-multipart_1770213099067/work
-pytz @ file:///croot/pytz_1752135852232/work
-PyYAML @ file:///home/task_176346546342115/conda-bld/pyyaml_1763465494987/work
-rich @ file:///home/task_176037556537490/conda-bld/rich_1760375626503/work
-rich-toolkit @ file:///home/task_176830855457343/croot/rich-toolkit_1768308576509/work
-ruff @ file:///home/task_177152751914586/croot/ruff_1771528372744/work
-safehttpx @ file:///home/task_176341789923406/conda-bld/safehttpx_1763417941252/work
-semantic_version @ file:///croot/semantic_version_1753191722251/work
-shellingham @ file:///home/task_176191202965262/conda-bld/shellingham_1761912203274/work
-six @ file:///croot/six_1744271502820/work
-sniffio @ file:///home/task_176432908282699/conda-bld/sniffio_1764329151716/work
-starlette @ file:///home/task_175691046219823/conda-bld/starlette-recipe_1756910682249/work
-tomli @ file:///home/task_176829635583515/croot/tomli_1768296437642/work
-tomlkit @ file:///home/task_176289657751744/conda-bld/tomlkit_1762896639520/work
-tqdm @ file:///home/task_177139829044356/croot/tqdm_1771398710408/work
-typer==0.20.0
-typer-slim==0.20.0
-typing-inspection @ file:///home/task_176061351159976/conda-bld/typing-inspection_1760614166076/work
-typing_extensions @ file:///croot/typing_extensions_1756280817316/work
-tzdata @ file:///home/task_176829656558347/croot/python-tzdata_1768296637279/work
-uvicorn @ file:///home/task_176822568703703/croot/uvicorn-split_1768226428589/work
-uvloop @ file:///home/task_176217535403751/conda-bld/uvloop_1762175503684/work
-watchfiles @ file:///home/task_176798443946508/croot/watchfiles_1767984618987/work
-websockets @ file:///croot/websockets_1751974421031/work
+gradio==4.20.0
+numpy
+urdfpy
+networkx
+lxml
+scipy
+pycollada
+trimesh
+pillow
