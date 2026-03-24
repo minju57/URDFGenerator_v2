@@ -15,6 +15,14 @@ window.select_joint_js = function(index) {
         console.error("Bridge element not found inside #js_bridge_input.");
     }
 }
+
+// CSP-safe: SVG 노드 클릭을 data-joint-idx 속성으로 위임 처리
+document.addEventListener('click', function(e) {
+    const a = e.target.closest('[data-joint-idx]');
+    if (!a) return;
+    e.preventDefault();
+    window.select_joint_js(parseInt(a.getAttribute('data-joint-idx')));
+});
 </script>
 """
 

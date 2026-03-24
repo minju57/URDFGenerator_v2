@@ -1,3 +1,4 @@
+import re
 import networkx as nx
 
 
@@ -121,6 +122,12 @@ def draw_tree_diagram(joints, selected_idx, base_joint):
         A.graph_attr.update(rankdir='LR', nodesep='0.3', ranksep='0.4', bgcolor='transparent', fontname='Arial')
         A.edge_attr.update(penwidth='1.2')
         svg_code = A.draw(format='svg', prog='dot').decode('utf-8')
+        # CSP-safe: javascript: URI를 data-joint-idx 속성으로 교체
+        svg_code = re.sub(
+            r'(?:xlink:)?href="javascript:window\.select_joint_js\((-?\d+)\);"',
+            r'data-joint-idx="\1"',
+            svg_code
+        )
         return f"<div style='width: 100%; overflow-x: auto; padding: 10px; text-align: center;'>{svg_code}</div>"
     except Exception as e:
         return f"<div style='color:red'>Graphviz Error: {e}</div>"
